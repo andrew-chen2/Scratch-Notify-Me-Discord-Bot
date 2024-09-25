@@ -6,7 +6,7 @@ from pymongo import MongoClient
 
 #Connect to MongoDB
 client = MongoClient("MONGODB_URI")
-db = client['ScratchNotifyMe']
+db = client['CLUSTER_NAME']
 users_collection = db['tracked_users']
 
 #Define the bot
@@ -95,11 +95,17 @@ async def view_users(interaction: discord.Interaction):
 async def notify_new_project(identifier, username, project, is_dm):
     if is_dm:
         user = await bot.fetch_user(int(identifier))
-        await user.send(f"New project by **{username}**!\nTitle: {project['title']}\nLink: https://scratch.mit.edu/projects/{project['id']}/")
+        try:
+            await user.send(f"New project by **{username}**!\nTitle: {project['title']}\nLink: https://scratch.mit.edu/projects/{project['id']}/")
+        except discord.Forbidden:
+            print(f"Error: Bot does not have permission to send a DM to {user}.")
     else:
         channel = bot.get_channel(int(identifier))
         if channel:
-            await channel.send(f"New project by **{username}**!\nTitle: {project['title']}\nLink: https://scratch.mit.edu/projects/{project['id']}/")
+            try:
+                await channel.send(f"New project by **{username}**!\nTitle: {project['title']}\nLink: https://scratch.mit.edu/projects/{project['id']}/")
+            except discord.Forbidden:
+                print(f"Error: Bot does not have permission to send a message in the channel {channel.name}.")
 
 @tasks.loop(seconds=60)
 async def track_new_projects():
