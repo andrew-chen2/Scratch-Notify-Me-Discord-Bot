@@ -109,35 +109,38 @@ async def notify_new_project(identifier, username, project, is_dm):
 
 @tasks.loop(seconds=60)
 async def track_new_projects():
-    for identifier in users_collection.distinct("identifier"):
-        users = users_collection.find({"identifier": identifier})
-        for user_entry in users:
-            username = user_entry['username']
-            is_dm = user_entry.get('is_dm', False)
-            current_projects = get_user_projects(username)
-            current_project_ids = {project['id'] for project in current_projects}
-
-            known_projects = set(user_entry.get('known_projects', []))
-
-            #Remove projects that are no longer shared
-            removed_projects = known_projects - current_project_ids
-            if removed_projects:
-                users_collection.update_one(
-                    {"identifier": identifier, "username": username},
-                    {"$pull": {"known_projects": {"$in": list(removed_projects)}}}
-                )
-            
-            #Check for new projects
-            new_projects = current_project_ids - known_projects
-            for project_id in new_projects:
-                project = next(project for project in current_projects if project['id'] == project_id)
-                await notify_new_project(identifier, username, project, is_dm)
-
-                #Update database
-                users_collection.update_one(
-                    {"identifier": identifier, "username": username},
-                    {"$addToSet": {"known_projects": project_id}}
-                )
+    try:
+        for identifier in users_collection.distinct("identifier"):
+            users = users_collection.find({"identifier": identifier})
+            for user_entry in users:
+                username = user_entry['username']
+                is_dm = user_entry.get('is_dm', False)
+                current_projects = get_user_projects(username)
+                current_project_ids = {project['id'] for project in current_projects}
+    
+                known_projects = set(user_entry.get('known_projects', []))
+    
+                #Remove projects that are no longer shared
+                removed_projects = known_projects - current_project_ids
+                if removed_projects:
+                    users_collection.update_one(
+                        {"identifier": identifier, "username": username},
+                        {"$pull": {"known_projects": {"$in": list(removed_projects)}}}
+                    )
+                
+                #Check for new projects
+                new_projects = current_project_ids - known_projects
+                for project_id in new_projects:
+                    project = next(project for project in current_projects if project['id'] == project_id)
+                    await notify_new_project(identifier, username, project, is_dm)
+    
+                    #Update database
+                    users_collection.update_one(
+                        {"identifier": identifier, "username": username},
+                        {"$addToSet": {"known_projects": project_id}}
+                    )
+    except Exception as e:
+        print(f"Error when tracking projects: {e}")
 
 @bot.event
 async def on_ready():
@@ -145,4 +148,4 @@ async def on_ready():
     track_new_projects.start()  #Start  background task to track new projects
     print(f"Logged in as {bot.user}")
 
-bot.run("DISCORD_BOT_TOKEN")
+bot.run("DISCORD_BOT_TOKEN", reconnect=True)
